@@ -1,5 +1,5 @@
-from .base_extractor import BaseExtractor
-from .audio_extractor import AudioExtractor
+from extractors.BaseExtractor import BaseExtractor
+from extractors.AudioExtractor import AudioExtractor
 
 # This extractor relies on the 'moviepy' library to get the audio from a video file.
 # If it doesn't work just use 'whisper' apparently it's good for extraction too

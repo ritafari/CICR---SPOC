@@ -1,4 +1,4 @@
-from .base_extractor import BaseExtractor
+from extractors.BaseExtractor import BaseExtractor
 
 # I choose PyMuPDF (fitz) because it's fast, lightweight, and has good text extraction capabilities AND data processing occurs LOCALLY (see restrictions for project)
 # MAKE SURE TO INSTALL PyMuPDF: pip install PyMuPDF !!!!!!!

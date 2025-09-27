@@ -1,4 +1,4 @@
-from .base_extractor import BaseExtractor
+from extractors.BaseExtractor import BaseExtractor
 
 class TextExtractor(BaseExtractor):
     """Extracts content from plain text files (.txt, .log, .md, etc.)."""

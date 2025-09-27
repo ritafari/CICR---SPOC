@@ -1,5 +1,5 @@
 import os 
-from file_handler.identifier import identify_file_type
+from file_handler.FileIdentifier import identify_file_type
 from file_handler.ExtractorManager import get_extractor
 
 def process_file(file_path):

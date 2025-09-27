@@ -1,4 +1,4 @@
-from .base_extractor import BaseExtractor
+from extractors.BaseExtractor import BaseExtractor
 
 # Here use OCR (optical character recognition) to extract text from images
 # Tesseract (runs entirely locally) and is a powerful OCR engine that supports multiple languages (including arabic and spanish accroding to their doc)

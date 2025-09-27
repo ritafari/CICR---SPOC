@@ -1,11 +1,11 @@
 # This file is like the "manager"
 # Has to know about all the different extractor tools and provde the correct one when needed
 
-from extractors.text_extractor import TextExtractor
-from extractors.audio_extractor import AudioExtractor
-from extractors.video_extractor import VideoExtractor
-from extractors.pdf_extractor import PDFExtractor
-from extractors.image_extractor import ImageExtractor
+from extractors.PlainTextExtractor import TextExtractor
+from extractors.AudioExtractor import AudioExtractor
+from extractors.VideoExtractor import VideoExtractor
+from extractors.PdfExtractor import PdfExtractor
+from extractors.ImageExtractor import ImageExtractor
 # If we create more extractors we just have to put them there and add them to the map below
 
 # Dictionary that maps the standardized file type to the correct extrcator class
@@ -14,7 +14,7 @@ EXTRACTOR_MAPPING = {
     'text': TextExtractor,
     'audio': AudioExtractor,
     'video': VideoExtractor,
-    'pdf': PDFExtractor,
+    'pdf': PdfExtractor,
     'image': ImageExtractor,
 }
 

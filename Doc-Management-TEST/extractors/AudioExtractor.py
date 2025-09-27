@@ -1,4 +1,4 @@
-from .base_extractor import BaseExtractor
+from extractors.BaseExtractor import BaseExtractor
 
 # For seech-to-text these are the options i found during research time:
 # OpenAI's Whisper (open-source, good quality, requires setup)
