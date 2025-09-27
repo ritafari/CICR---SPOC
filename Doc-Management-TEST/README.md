@@ -40,3 +40,10 @@ This entire "Part 1" structure is designed to produce one thing: a clean string 
 Input for Part 2 (LLM Process): LLM doesn't care if the text came from a PDF, an image, or a video; it just needs the text.<br>
 
 Input for Part 3 (Presentation): LLM will process the text and generate a result (a summary, an answer, etc.). That result will then be sent to  presentation layer (a web app, a command-line interface, etc.) to be shown to the user.<br>
+
+
+
+# FIX
+Either put the translation step directly in main or in all extractors because i implemented it only in AudioExtractor.py, ImageExtractor.py and VideoExtractor.py
+Also test cause i haven't had the time...
+
