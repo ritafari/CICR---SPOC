@@ -7,7 +7,7 @@ from .audio_extractor import AudioExtractor
 # install on your OS too not just pycharm terminal
 
 try:
-    from moviepy.editor import VideoFileClip
+    from moviepy import VideoFileClip   # I had from moviepy.editor import VideoFileClip but it gave me an error so...
 except ImportError:
     VideoFileClip = None
 
