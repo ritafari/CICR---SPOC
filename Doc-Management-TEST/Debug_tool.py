@@ -3,8 +3,8 @@ import os
 # --- PASTE YOUR PROBLEMATIC PATHS HERE ---
 # Use the EXACT same strings you used in your main.py file.
 
-path_to_pdf = "/YOUR/PATH/CopyLLAMADAS.pdf"
-path_to_mp4 = "/YOUR/PATH/WhatsAppAudio.mp4"
+path_to_pdf = "/YOUR/PATH/LLAMADAS.pdf",
+path_to_mp4= "/YOUR/PATH/WhatsAppAudio.mp4",
 
 
 print("--- Debugging File Paths ---")

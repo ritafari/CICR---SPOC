@@ -9,6 +9,7 @@ from extractors.BaseExtractor import BaseExtractor
 # MAKE SURE TO INSTALL pydub and whisper: pip install pydub openai-whisper !!!!!!!
 # install on your OS too not just pycharm terminal
 
+# See with Arabic cause they're dialect and whisper may only handle literary arabic only...
 try:
     import whisper
     from pydub import AudioSegment

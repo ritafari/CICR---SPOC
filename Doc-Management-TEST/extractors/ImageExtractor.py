@@ -7,6 +7,8 @@ from extractors.BaseExtractor import BaseExtractor
 # VOC:
 # OSD = Orientation and Script Detection
 
+# Maybe check for another library for manuscript text extraction in case tesseract fails
+
 try:
     import pytesseract
     from pytesseract import Output
@@ -48,7 +50,7 @@ class ImageExtractor(BaseExtractor):
                     # Map script to Tesseract language code
                     script_to_lang = {
                         'Latin': 'eng',  # English and many other languages
-                        'Arabic': 'ara',
+                        'Arabic': 'ara', # Literary Arabic
                         'Cyrillic': 'rus',
                         'Devanagari': 'hin',
                         'Han': 'chi_sim',  # Simplified Chinese
