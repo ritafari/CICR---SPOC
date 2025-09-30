@@ -36,23 +36,23 @@ def process_file(file_path):
 if __name__ == "__main__":
     # -------Example usage-------
     # Replace with name of the CIRC Files 
-    if not os.path.exists("CIRC_Files"):
-        os.makedirs("CIRC_Files")
+    if not os.path.exists("/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files"):
+        os.makedirs("/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files")
     
-    with open("CIRC_Files/example.txt", "w") as f:
+    with open("/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.txt", "w") as f:
         f.write("This is a sample text file for testing.")
-    with open("CIRC_Files/example.md", "w") as f:
+    with open("/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.md", "w") as f:
         f.write("# Sample Markdown\nThis is a sample markdown file.")
     
     files_to_process = [
-        "CIRC_Files/example.txt",
-        "CIRC_Files/example.md",
-        "CIRC_Files/nonexistentfile.xyz",  # Non-existent file to test error handling
-        "CIRC_Files/unsupportedfile.xyz"    # Unsupported file type to test error handling
-        "CIRC_Files/example.pdf",
-        "CIRC_Files/example.jpg",
-        "CIRC_Files/example.mp3",
-        "CIRC_Files/example.mp4",
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.txt",
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.md",
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/nonexistentfile.xyz",  # Non-existent file to test error handling
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/unsupportedfile.xyz",   # Unsupported file type to test error handling
+        "/YOUR/PATH/CopyLLAMADAS.pdf",
+        # "CIRC_Files/example.jpg",
+        # "CIRC_Files/example.mp3",
+        "/YOUR/PATH/WhatsAppAudio.mp4",
         #...
     ]
 

@@ -29,13 +29,16 @@ class PdfExtractor(BaseExtractor):
         """
         if not fitz:
             raise "[Warning] PyMuPDF library is not installed. Please install it with 'pip install PyMuPDF'"
-            
+        
+        text_content = []
+
         try:
             # Open the PDF file
             pdf_document = fitz.open(file_path)
     
             # Iterate through each page and extract text
             for page_num in range(len(pdf_document)):
+                page = pdf_document.load_page(page_num)
                 # page.get_text() extracts the text from the page
                 text = page.get_text()
                 if text:

@@ -19,8 +19,10 @@ class VideoExtractor(BaseExtractor):
         """Initialize with shared AudioExtractor.
         Args:    
             model_size (str): Whisper model size for audio processing
-        """       
-        self.audio_extractor = AudioExtractor(model_size=model_size)
+        """ 
+        self.model_size = model_size
+        self.audio_extractor = None      
+        #self.audio_extractor = AudioExtractor(model_size=model_size)
 
     def extract(self, file_path):
         """Extracts the audio track from a video file, saves it and then uses AudioExtractor to transcribe it.
@@ -35,16 +37,14 @@ class VideoExtractor(BaseExtractor):
         audio_path = "temp_extract_audio.wav"
 
         try:
-            # 1. Load video
+            # 1. Load video and extract audio
             video_clip = VideoFileClip(file_path)
-
-            # 2. Extract audio and write in temp file
             video_clip.audio.write_audiofile(audio_path)
             video_clip.close()
 
-            # 3. Use AudioExtractor to transcribe the audio
-            return self.audio_extractor.extract(audio_path, language = None, translate_to_english = False)  # reusing the same instance
-        
+            # 2. Use AudioExtractor to transcribe (this will load the model only now)
+            audio_extractor = self._get_audio_extractor()
+            return audio_extractor.extract(audio_path, language=None, translate_to_english=False)
         
         except Exception as e:
             return f"[Error] Failed to process video file {file_path}. Reason {e}"

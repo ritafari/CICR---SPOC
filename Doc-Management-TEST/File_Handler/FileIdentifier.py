@@ -8,12 +8,12 @@ EXTENSION_MAP = {
     '.rtf': 'text',
     '.csv': 'text',
     '.log': 'text',
-    'json': 'text',
+    '.json': 'text',
     'xml': 'text',
 
     # all document files
-    '.docx': 'document',
-    'pdf': 'document',
+    '.docx': 'docx',
+    '.pdf': 'pdf',
 
     # all image files
     '.jpg': 'image',
@@ -30,7 +30,7 @@ EXTENSION_MAP = {
     'm4a': 'audio',
 
     # all video files (Audio will first be extracted than speech-to-text)
-    '.mp4': 'video',
+    '.mp4': 'audio',
     '.avi': 'video',
     '.mov': 'video',
 }

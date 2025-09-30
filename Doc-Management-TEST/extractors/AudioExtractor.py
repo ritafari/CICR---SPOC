@@ -25,19 +25,24 @@ class AudioExtractor(BaseExtractor):
         Args:
             model_size (str): The size of the Whisper model to load. Options include 'tiny', 'base', 'small', 'medium', and 'large'.
         """
+        super().__init__()
         self.model_size = model_size  # Default model size set to 'base'
         self.model = None
-        self._load_model()
 
     def _load_model(self):
         """Load whisper model (only once)"""
-        if not whisper:
-            raise "[Warning] whisper or pydub library is not installed. Please install them with 'pip install openai-whisper pydub'"
+        if not whisper or not AudioSegment:
+            # FIX: Raise a proper ImportError, not a string.
+            raise ImportError("[Warning] whisper or pydub is not installed. Please run 'pip install openai-whisper pydub'")
+        
         if self.model is None:
             try:
+                print(f"Loading Whisper model ({self.model_size})... This may take a moment.")
                 self.model = whisper.load_model(self.model_size)
+                print("Model loaded successfully.")
             except Exception as e:
-                raise f"[Error] Failed to load Whisper model of size '{self.model_size}'. Reason: {e}"
+                # FIX: Raise a proper RuntimeError, not an f-string.
+                raise RuntimeError(f"[Error] Failed to load Whisper model '{self.model_size}'. Reason: {e}")
 
     def extract(self, file_path, language = None, translate_to_english = False):
         """Converts speech in an audio file to text
@@ -48,11 +53,8 @@ class AudioExtractor(BaseExtractor):
         Returns:
             str: The transcribed text from the audio file.
         """
-        if not whisper or not AudioSegment:
-            raise "[Warning] Required libraries are not installed."
-        
         if self.model is None:
-            raise "[Warning] Whisper model is not loaded properly."
+            self._load_model()
         
         try:
             if not file_path.lower().endswith('.wav'): # I only put .wav cause it'll be easier to have all output in sameformat and video extractor already makes wav
@@ -68,6 +70,6 @@ class AudioExtractor(BaseExtractor):
             return result['text']
         
         except Exception as e:
-            raise f"[Error] Failed to process audio file {file_path}. Reason: {e}"
+            raise RuntimeError(f"[Error] Failed to process audio file {file_path}. Reason: {e}")
         
         
