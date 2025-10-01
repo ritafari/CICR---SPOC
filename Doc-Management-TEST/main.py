@@ -45,8 +45,8 @@ if __name__ == "__main__":
         f.write("# Sample Markdown\nThis is a sample markdown file.")
     
     files_to_process = [
-        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.txt",
-        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/example.md",
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/Example.txt",
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/Example.md",
         "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/nonexistentfile.xyz",  # Non-existent file to test error handling
         "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/unsupportedfile.xyz"   # Unsupported file type to test error handling
         # ... add more test files as needed
