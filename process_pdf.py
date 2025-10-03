@@ -5,10 +5,26 @@ import numpy as np
 import os
 import io
 from PIL import Image, ImageDraw, ImageFont
+import time
+from datetime import datetime
+import signal
+import sys
 
 # Initialize the EasyOCR reader once
 print("Loading EasyOCR model...")
 reader = easyocr.Reader(['en']) # Add other languages if needed
+
+# Global variable to track if Ctrl+C was pressed
+stop_processing = False
+
+def signal_handler(sig, frame):
+    """Handle Ctrl+C gracefully"""
+    global stop_processing
+    print(f"\n\n⚠️  Ctrl+C detected! Stopping after current page...")
+    stop_processing = True
+
+# Register the signal handler
+signal.signal(signal.SIGINT, signal_handler)
 
 def group_text_into_paragraphs(results, line_threshold=30, word_threshold=50):
     """
@@ -105,134 +121,6 @@ def create_paragraph_text(paragraphs):
     
     return full_text.strip()
 
-def draw_paragraph_visualization(image, paragraphs, text_panel_width=800):
-    """
-    Draw paragraphs with different colors and create formatted text output
-    """
-    # Make a copy to draw on
-    viz_image = image.copy()
-    
-    # Create a white panel for the transcribed text
-    h, w, _ = viz_image.shape
-    text_panel = np.ones((h, text_panel_width, 3), dtype=np.uint8) * 255
-    
-    # Convert to PIL Image for drawing text with better font support
-    pil_text_panel = Image.fromarray(text_panel)
-    draw = ImageDraw.Draw(pil_text_panel)
-    
-    try:
-        font = ImageFont.truetype("arial.ttf", 16)
-        title_font = ImageFont.truetype("arial.ttf", 18)
-    except IOError:
-        font = ImageFont.load_default()
-        title_font = ImageFont.load_default()
-
-    # Colors for different paragraphs
-    colors = [
-        (255, 0, 0),    # Red
-        (0, 255, 0),    # Green
-        (0, 0, 255),    # Blue
-        (255, 255, 0),  # Cyan
-        (255, 0, 255),  # Magenta
-        (0, 255, 255),  # Yellow
-    ]
-    
-    y_offset = 20
-    full_transcription = ""
-    
-    # Draw title
-    draw.text((20, y_offset), "EXTRACTED TEXT (Grouped by Paragraphs):", font=title_font, fill=(0, 0, 0))
-    y_offset += 40
-    
-    # Draw bounding boxes and collect text
-    for para_idx, paragraph in enumerate(paragraphs):
-        color = colors[para_idx % len(colors)]
-        paragraph_text = ""
-        
-        for line_idx, line in enumerate(paragraph):
-            line_text = ""
-            
-            for word_idx, (bbox, text, confidence) in enumerate(line):
-                # Get bounding box coordinates
-                (tl, tr, br, bl) = bbox
-                tl = (int(tl[0]), int(tl[1]))
-                br = (int(br[0]), int(br[1]))
-                
-                # Draw bounding box with paragraph color
-                cv2.rectangle(viz_image, tl, br, color, 2)
-                
-                # Add confidence score
-                cv2.putText(viz_image, f"{confidence:.2f}", (tl[0], tl[1]-5), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-                
-                # Build line text
-                clean_text = text.strip()
-                if clean_text:
-                    if line_text and not line_text[-1] in '(-[{':
-                        line_text += " "
-                    line_text += clean_text
-            
-            if line_text:
-                paragraph_text += line_text + " "
-        
-        # Clean up paragraph text
-        paragraph_text = paragraph_text.strip()
-        if paragraph_text:
-            # Add paragraph to full transcription
-            full_transcription += paragraph_text + "\n\n"
-            
-            # Draw paragraph number on image
-            if paragraph:
-                first_bbox = paragraph[0][0][0]
-                para_tl = (int(first_bbox[0][0]), int(first_bbox[0][1]))
-                cv2.putText(viz_image, f"P{para_idx+1}", (para_tl[0], para_tl[1]-15), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-    
-    # Write formatted text to side panel
-    text_lines = full_transcription.split('\n')
-    for line in text_lines:
-        if line.strip():  # Only non-empty lines
-            # Wrap long lines
-            if len(line) > 80:
-                words = line.split()
-                wrapped_lines = []
-                current_line = ""
-                for word in words:
-                    if len(current_line + " " + word) <= 80:
-                        if current_line:
-                            current_line += " " + word
-                        else:
-                            current_line = word
-                    else:
-                        wrapped_lines.append(current_line)
-                        current_line = word
-                if current_line:
-                    wrapped_lines.append(current_line)
-                
-                for wrapped_line in wrapped_lines:
-                    if y_offset < h - 30:
-                        draw.text((20, y_offset), wrapped_line, font=font, fill=(0, 0, 0))
-                        y_offset += 25
-            else:
-                if y_offset < h - 30:
-                    draw.text((20, y_offset), line, font=font, fill=(0, 0, 0))
-                    y_offset += 25
-            
-            # Add extra space between paragraphs
-            y_offset += 10
-            
-        if y_offset > h - 50:
-            draw.text((20, y_offset), "... (text continues)", font=font, fill=(128, 128, 128))
-            break
-    
-    # Convert the PIL image back to an OpenCV image
-    final_text_panel = np.array(pil_text_panel)
-
-    # Combine the visualized image and the text panel side-by-side
-    combined_image = np.hstack((viz_image, final_text_panel))
-    
-    return combined_image, full_transcription
-
 def detect_text_orientation(image):
     """
     Detect orientation based on text alignment and OCR confidence
@@ -301,87 +189,306 @@ def preprocess_image_for_ocr(image):
     sharpened = cv2.filter2D(enhanced, -1, kernel)
     return sharpened
 
-def process_pdf_with_paragraphs(pdf_path):
+def draw_ocr_results(image, results, text_panel_width=800):
     """
-    Processes a PDF, performs OCR with paragraph grouping, and saves results
+    Draws OCR bounding boxes on the image and creates a side panel with transcribed text.
     """
-    base_filename = os.path.splitext(os.path.basename(pdf_path))[0]
-    all_extracted_text = ""
+    # Make a copy to draw on
+    viz_image = image.copy()
     
-    with fitz.open(pdf_path) as doc:
-        for page_num in range(len(doc)):
-            print(f"\n--- Processing Page {page_num + 1} ---")
-            
-            fitz_page = doc.load_page(page_num)
-            
-            # Render page to image
-            pix = fitz_page.get_pixmap(dpi=300)
-            img_data = pix.tobytes("png")
-            image_np = np.frombuffer(img_data, np.uint8)
-            original_image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-
-            # Correct orientation
-            print("   -> Correcting orientation...")
-            rotation_angle = detect_text_orientation(original_image)
-            corrected_image = rotate_image(original_image, rotation_angle)
-            
-            # Preprocess for OCR
-            print("   -> Preprocessing image...")
-            preprocessed_image = preprocess_image_for_ocr(corrected_image)
-            
-            # Perform OCR
-            print("   -> Running OCR...")
-            results = reader.readtext(preprocessed_image)
-            
-            if not results:
-                print("   -> No text detected on this page.")
-                continue
-
-            print(f"   -> Detected {len(results)} individual text elements")
-            
-            # Group into paragraphs
-            print("   -> Grouping text into paragraphs...")
-            paragraphs = group_text_into_paragraphs(results)
-            
-            print(f"   -> Organized into {len(paragraphs)} paragraphs")
-            
-            # Create visualization and get formatted text
-            comparison_image, page_text = draw_paragraph_visualization(corrected_image, paragraphs)
-            
-            # Save visualization
-            output_filename = f"{base_filename}_page_{page_num + 1}_paragraphs.png"
-            cv2.imwrite(output_filename, comparison_image)
-            
-            # Add to full text with page marker
-            if page_text:
-                all_extracted_text += f"\n{'='*60}\nPAGE {page_num + 1}\n{'='*60}\n\n{page_text}\n"
-            
-            print(f"   -> Saved paragraph visualization to '{output_filename}'")
-            
-            # Show sample of extracted text
-            if page_text:
-                sample = page_text[:200] + "..." if len(page_text) > 200 else page_text
-                print(f"   -> Extracted text sample: {sample}")
+    # Create a white panel for the transcribed text
+    h, w, _ = viz_image.shape
+    text_panel = np.ones((h, text_panel_width, 3), dtype=np.uint8) * 255
     
-    # Save all extracted text to a file
-    if all_extracted_text:
-        text_filename = f"{base_filename}_full_text.txt"
-        with open(text_filename, 'w', encoding='utf-8') as f:
+    # Convert to PIL Image for drawing text with better font support
+    pil_text_panel = Image.fromarray(text_panel)
+    draw = ImageDraw.Draw(pil_text_panel)
+    
+    try:
+        font = ImageFont.truetype("arial.ttf", 16)
+        title_font = ImageFont.truetype("arial.ttf", 18)
+    except IOError:
+        font = ImageFont.load_default()
+        title_font = ImageFont.load_default()
+
+    y_offset = 20
+    full_transcription = ""
+
+    # Draw title
+    draw.text((20, y_offset), "EXTRACTED TEXT (Grouped by Paragraphs):", font=title_font, fill=(0, 0, 0))
+    y_offset += 40
+
+    # Draw bounding boxes and collect text
+    for (bbox, text, prob) in results:
+        # Get top-left and bottom-right points from the bounding box
+        (tl, tr, br, bl) = bbox
+        tl = (int(tl[0]), int(tl[1]))
+        br = (int(br[0]), int(br[1]))
+        
+        # Draw a green rectangle around the detected text
+        cv2.rectangle(viz_image, tl, br, (0, 255, 0), 2)
+        
+        # Add text label
+        cv2.putText(viz_image, f"{prob:.2f}", (tl[0], tl[1]-10), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        
+        # Add the text to our list for the side panel
+        if prob > 0.3:
+            full_transcription += text + " "
+
+    # Write the full transcription on the side panel
+    text_lines = full_transcription.split()
+    current_line = ""
+    for word in text_lines:
+        if len(current_line + " " + word) <= 60:  # Rough character count for line wrapping
+            if current_line:
+                current_line += " " + word
+            else:
+                current_line = word
+        else:
+            if y_offset < h - 30:
+                draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
+                y_offset += 25
+            current_line = word
+    
+    if current_line and y_offset < h - 30:
+        draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
+            
+    # Convert the PIL image back to an OpenCV image
+    final_text_panel = np.array(pil_text_panel)
+
+    # Combine the visualized image and the text panel side-by-side
+    combined_image = np.hstack((viz_image, final_text_panel))
+    
+    return combined_image, full_transcription.strip()
+
+def process_pdf_to_single_text_file(pdf_path, output_base_folder):
+    """
+    Process a single PDF and save ALL text to one final text file per PDF
+    """
+    global stop_processing
+    
+    # Create folder with PDF name
+    pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    output_folder = os.path.join(output_base_folder, pdf_name)
+    os.makedirs(output_folder, exist_ok=True)
+    
+    print(f"📁 Created output folder: {output_folder}")
+    
+    # Statistics
+    total_pages_processed = 0
+    total_processing_time = 0
+    page_times = []
+    
+    # This will contain ALL text from ALL pages
+    all_extracted_text = f"EXTRACTED TEXT FROM: {pdf_name}\n"
+    all_extracted_text += f"PROCESSING STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    all_extracted_text += "=" * 80 + "\n\n"
+    
+    try:
+        with fitz.open(pdf_path) as doc:
+            total_pages = len(doc)
+            
+            print(f"📄 Processing {total_pages} pages from: {pdf_name}")
+            
+            for page_num in range(total_pages):
+                # Check if user pressed Ctrl+C
+                if stop_processing:
+                    print(f"🛑 Stopping processing as requested by user...")
+                    break
+                
+                # Start page timer
+                page_start_time = time.time()
+                page_timestamp = datetime.now().strftime("%H:%M:%S")
+                
+                print(f"  🖼️  Processing Page {page_num + 1}/{total_pages} [{page_timestamp}]")
+                
+                fitz_page = doc.load_page(page_num)
+                
+                # Render page to image
+                pix = fitz_page.get_pixmap(dpi=300)
+                img_data = pix.tobytes("png")
+                image_np = np.frombuffer(img_data, np.uint8)
+                original_image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+
+                # Correct orientation
+                rotation_angle = detect_text_orientation(original_image)
+                corrected_image = rotate_image(original_image, rotation_angle)
+                
+                # Preprocess for OCR
+                preprocessed_image = preprocess_image_for_ocr(corrected_image)
+                
+                # Perform OCR
+                results = reader.readtext(preprocessed_image)
+                
+                # Calculate page processing time
+                page_total_time = time.time() - page_start_time
+                page_times.append(page_total_time)
+                total_processing_time += page_total_time
+                
+                # Add page header to the text
+                all_extracted_text += f"\n{'='*60}\n"
+                all_extracted_text += f"PAGE {page_num + 1}\n"
+                all_extracted_text += f"Processing time: {page_total_time:.2f}s\n"
+                all_extracted_text += f"{'='*60}\n\n"
+                
+                if not results:
+                    print(f"    ⚠️  No text detected on page {page_num + 1}")
+                    all_extracted_text += "NO TEXT DETECTED\n\n"
+                    continue
+                
+                print(f"    ✅ Detected {len(results)} text elements")
+                
+                # Group text into paragraphs
+                paragraphs = group_text_into_paragraphs(results)
+                page_text = create_paragraph_text(paragraphs)
+                
+                # Create visualization (optional - for debugging)
+                visualization_image, extracted_text = draw_ocr_results(corrected_image, results)
+                
+                # Save visualization image (optional)
+                viz_filename = os.path.join(output_folder, f"page_{page_num + 1:03d}_analysis.png")
+                cv2.imwrite(viz_filename, visualization_image)
+                
+                # Add the extracted text to our main document
+                if page_text:
+                    all_extracted_text += page_text + "\n\n"
+                    print(f"    ✅ Extracted {len(page_text)} characters")
+                else:
+                    all_extracted_text += "No readable text extracted.\n\n"
+                    print(f"    ⚠️  No readable text extracted")
+                
+                print(f"    ⏱️  Page processed in: {page_total_time:.2f}s")
+                total_pages_processed += 1
+        
+        # Add final summary to the text
+        all_extracted_text += "\n" + "=" * 80 + "\n"
+        all_extracted_text += "PROCESSING SUMMARY\n"
+        all_extracted_text += "=" * 80 + "\n"
+        all_extracted_text += f"PDF File: {pdf_name}\n"
+        all_extracted_text += f"Total Pages: {total_pages}\n"
+        all_extracted_text += f"Pages Processed: {total_pages_processed}\n"
+        all_extracted_text += f"Total Processing Time: {total_processing_time:.2f}s\n"
+        
+        if page_times:
+            avg_page_time = sum(page_times) / len(page_times)
+            all_extracted_text += f"Average Page Time: {avg_page_time:.2f}s\n"
+            all_extracted_text += f"Fastest Page: {min(page_times):.2f}s\n"
+            all_extracted_text += f"Slowest Page: {max(page_times):.2f}s\n"
+        
+        all_extracted_text += f"Total Characters Extracted: {len(all_extracted_text)}\n"
+        all_extracted_text += f"Processing Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        
+        if stop_processing:
+            all_extracted_text += f"\n⚠️  PROCESSING STOPPED BY USER AFTER PAGE {total_pages_processed}\n"
+        
+        all_extracted_text += "=" * 80 + "\n"
+        
+        # Save the FINAL text file with ALL pages
+        final_text_filename = os.path.join(output_folder, f"{pdf_name}_FINAL_EXTRACTED_TEXT.txt")
+        with open(final_text_filename, 'w', encoding='utf-8') as f:
             f.write(all_extracted_text)
-        print(f"\n✅ Full extracted text saved to: {text_filename}")
+        
+        print(f"\n✅ Successfully processed {pdf_name}")
+        print(f"📊 Processed {total_pages_processed}/{total_pages} pages")
+        print(f"⏱️  Total time: {total_processing_time:.2f}s")
+        print(f"📄 Final text file: {final_text_filename}")
+        
+        if stop_processing:
+            print(f"🛑 Processing was stopped by user after {total_pages_processed} pages")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error processing {pdf_path}: {e}")
+        return False
+
+def process_all_pdfs_in_folder(input_folder, output_base_folder):
+    """
+    Process all PDF files in a folder, creating individual folders for each PDF
+    with one final text file containing all pages
+    """
+    global stop_processing
     
-    return all_extracted_text
+    # Check if input folder exists
+    if not os.path.exists(input_folder):
+        print(f"❌ Input folder does not exist: {input_folder}")
+        print("Please check the path and try again.")
+        return
+    
+    # Create output base folder if it doesn't exist
+    os.makedirs(output_base_folder, exist_ok=True)
+    
+    # Get all PDF files in the input folder
+    try:
+        pdf_files = [f for f in os.listdir(input_folder) if f.lower().endswith('.pdf')]
+    except FileNotFoundError:
+        print(f"❌ Cannot access folder: {input_folder}")
+        print("Please check the folder path and permissions.")
+        return
+    
+    if not pdf_files:
+        print(f"❌ No PDF files found in {input_folder}")
+        return
+    
+    print(f"📁 Found {len(pdf_files)} PDF files in folder")
+    print("ℹ️  Press Ctrl+C at any time to stop processing after current page")
+    print("=" * 60)
+    
+    # Statistics
+    total_files = len(pdf_files)
+    processed_files = 0
+    failed_files = 0
+    
+    # Process each PDF
+    for i, pdf_file in enumerate(pdf_files, 1):
+        # Check if user pressed Ctrl+C
+        if stop_processing:
+            print(f"\n🛑 Stopping batch processing as requested by user...")
+            break
+            
+        pdf_path = os.path.join(input_folder, pdf_file)
+        
+        # Check if PDF file exists
+        if not os.path.exists(pdf_path):
+            print(f"❌ PDF file not found: {pdf_path}")
+            failed_files += 1
+            continue
+            
+        print(f"\n[{i}/{total_files}] 📄 Processing: {pdf_file}")
+        
+        success = process_pdf_to_single_text_file(pdf_path, output_base_folder)
+        
+        if success:
+            processed_files += 1
+            print(f"✅ Completed: {pdf_file}")
+        else:
+            failed_files += 1
+            print(f"❌ Failed: {pdf_file}")
+    
+    # Print final summary
+    print("\n" + "=" * 60)
+    print("📊 BATCH PROCESSING COMPLETE!")
+    print("=" * 60)
+    print(f"📁 Total PDFs: {total_files}")
+    print(f"✅ Successfully processed: {processed_files}")
+    print(f"❌ Failed: {failed_files}")
+    
+    if stop_processing:
+        print(f"🛑 Processing was stopped by user")
+    
+    print(f"📂 Output base folder: {output_base_folder}")
 
-# --- USAGE ---
-pdf_file1 = '/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/NL-Archive-24092025T190200/name.pdf'
-# pdf_file2 = '/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/NL-Archive-24092025T190200/name.pdf' 
-extracted_text = process_pdf_with_paragraphs(pdf_file1)
-# extracted_text = process_pdf_with_paragraphs(pdf_file2)
+# --- USAGE with current directory ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
-# Print first few pages of extracted text
-if extracted_text:
-    print("\n" + "="*80)
-    print("EXTRACTED TEXT OVERVIEW")
-    print("="*80)
-    print(extracted_text[:2000] + "\n..." if len(extracted_text) > 2000 else extracted_text)
+input_folder = 'my/path/to/input/folder'  # Change this to your input folder
+output_base_folder = 'my/path/to/output/folder'  # Change this to your desired output folder
+
+print(f"🔍 Looking for PDFs in: {input_folder}")
+print(f"💾 Output will be saved to: {output_base_folder}")
+print(f"⏹️  You can stop processing at any time by pressing Ctrl+C")
+
+print("\n🚀 Starting PDF text extraction...")
+process_all_pdfs_in_folder(input_folder, output_base_folder)
