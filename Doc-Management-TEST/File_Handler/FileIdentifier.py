@@ -9,7 +9,7 @@ EXTENSION_MAP = {
     '.csv': 'text',
     '.log': 'text',
     '.json': 'text',
-    'xml': 'text',
+    '.xml': 'text',
 
     # all document files
     '.docx': 'docx',
@@ -27,10 +27,10 @@ EXTENSION_MAP = {
     '.mp3': 'audio',
     '.wav': 'audio',
     '.flac': 'audio',
-    'm4a': 'audio',
+    '.m4a': 'audio',
 
     # all video files (Audio will first be extracted than speech-to-text)
-    '.mp4': 'audio',
+    '.mp4': 'video',
     '.avi': 'video',
     '.mov': 'video',
 }

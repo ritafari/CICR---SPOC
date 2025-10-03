@@ -48,7 +48,12 @@ if __name__ == "__main__":
         "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/Example.txt",
         "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/Example.md",
         "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/nonexistentfile.xyz",  # Non-existent file to test error handling
-        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/unsupportedfile.xyz"   # Unsupported file type to test error handling
+        "/Users/emmafarigoule/Desktop/CICR---SPOC/Doc-Management-TEST/Sample_Files/unsupportedfile.xyz",   # Unsupported file type to test error handling
+        "/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/NL-Archive-24092025T190200/090-2013-2.pdf", # To test files that have turned pages 
+        "/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/NL-Archive-24092025T190200/app 118-2011 Castro Gloia Tomo 2  Mayo 2025.pdf", # To see if i can get written pdf text with normal pages 
+        "/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/Copy of sabana de llamadas  CRUZ ELVIRA HERNANDEZ LLAMADAS.pdf", #To see if phone records get loaded
+        "/Users/emmafarigoule/Desktop/TC/4A/SPOC-CIRC/data/AUDIO-2025-02-27-16-08-54.m4a", # To test audios
+        # To test images we need to ask for a .png/.jpeg/... file 
         # ... add more test files as needed
     ]
 
