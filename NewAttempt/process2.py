@@ -1,30 +1,205 @@
 import fitz  # PyMuPDF
-import easyocr
 import cv2
 import numpy as np
 import os
-import io
 from PIL import Image, ImageDraw, ImageFont
 import time
 from datetime import datetime
 import signal
-import sys
+import re
+import easyocr
+
+
+# Import your processor classes
+from processors.IDimage import idProcessor
+from processors.table import TableProcessor
+from processors.image import ImageProcessor
+from processors.contentDetector import ContentDetector
 
 # Initialize the EasyOCR reader once
 print("Loading EasyOCR model...")
-reader = easyocr.Reader(['en']) # Add other languages if needed
+reader = easyocr.Reader(['en', 'es'])  # Add other languages if needed
 
-# Global variable to track if Ctrl+C was pressed
+# Global variable to track if the process should be terminated
 stop_processing = False
 
 def signal_handler(sig, frame):
-    """Handle Ctrl+C gracefully"""
+    "Handle termination signals to stop processing gracefully."
     global stop_processing
     print(f"\n\n⚠️  Ctrl+C detected! Stopping after current page...")
     stop_processing = True
 
-# Register the signal handler
-signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)  # Register the signal handler
+
+
+def detect_text_orientation(image):
+    """
+    Detect orientation based on text alignment and OCR confidence
+    """
+    rotations = [0, 90, 180, 270]
+    best_rotation = 0
+    best_confidence = 0
+    
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    for rotation in rotations:
+        # Rotate image
+        if rotation == 90:
+            rotated = cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE)
+        elif rotation == 180:
+            rotated = cv2.rotate(gray, cv2.ROTATE_180)
+        elif rotation == 270:
+            rotated = cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        else:
+            rotated = gray
+        
+        # Try OCR on rotated image
+        try:
+            results = reader.readtext(rotated)
+            if results:
+                total_confidence = sum(prob for _, _, prob in results)
+                avg_confidence = total_confidence / len(results)
+                
+                if avg_confidence > best_confidence:
+                    best_confidence = avg_confidence
+                    best_rotation = rotation
+        except:
+            continue
+    
+    return best_rotation
+
+def rotate_image(image, angle):
+    """
+    Rotate image by specified angle
+    """
+    if angle == 0:
+        return image
+    
+    if angle == 90:
+        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    elif angle == 180:
+        return cv2.rotate(image, cv2.ROTATE_180)
+    elif angle == 270:
+        return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    else:
+        (h, w) = image.shape[:2]
+        center = (w // 2, h // 2)
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated = cv2.warpAffine(image, M, (w, h))
+        return rotated
+
+def preprocess_image_for_ocr(image):
+    """
+    Preprocess image to improve OCR accuracy
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    denoised = cv2.medianBlur(gray, 3)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(denoised)
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(enhanced, -1, kernel)
+    return sharpened
+
+def draw_ocr_results_with_content_type(image, results, content_type, content_info="", text_panel_width=800):
+    """
+    Enhanced version that includes content type information
+    """
+    # Make a copy to draw on
+    viz_image = image.copy()
+    
+    # Create a white panel for the transcribed text
+    h, w, _ = viz_image.shape
+    text_panel = np.ones((h, text_panel_width, 3), dtype=np.uint8) * 255
+    
+    # Convert to PIL Image for drawing text with better font support
+    pil_text_panel = Image.fromarray(text_panel)
+    draw = ImageDraw.Draw(pil_text_panel)
+    
+    try:
+        font = ImageFont.truetype("arial.ttf", 16)
+        title_font = ImageFont.truetype("arial.ttf", 18)
+        small_font = ImageFont.truetype("arial.ttf", 14)
+    except IOError:
+        font = ImageFont.load_default()
+        title_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    y_offset = 20
+    full_transcription = ""
+
+    # Draw title with content type
+    content_color = {
+        "text": (0, 100, 0),      # Dark green
+        "table": (0, 0, 150),     # Dark blue
+        "image": (150, 0, 0),     # Dark red
+        "id_card": (150, 100, 0), # Orange
+        "passport": (100, 0, 150) # Purple
+    }.get(content_type, (0, 0, 0))
+    
+    draw.text((20, y_offset), f"CONTENT TYPE: {content_type.upper()}", font=title_font, fill=content_color)
+    y_offset += 30
+    
+    if content_info:
+        draw.text((20, y_offset), content_info, font=small_font, fill=(100, 100, 100))
+        y_offset += 25
+    
+    draw.text((20, y_offset), "EXTRACTED CONTENT:", font=title_font, fill=(0, 0, 0))
+    y_offset += 40
+
+    # Draw bounding boxes with different colors based on content type
+    box_colors = {
+        "text": (0, 255, 0),      # Green
+        "table": (255, 0, 0),     # Blue
+        "image": (0, 0, 255),     # Red
+        "id_card": (255, 165, 0), # Orange
+        "passport": (128, 0, 128) # Purple
+    }
+    
+    box_color = box_colors.get(content_type, (0, 255, 0))
+
+    # Draw bounding boxes and collect text
+    for (bbox, text, prob) in results:
+        # Get top-left and bottom-right points from the bounding box
+        (tl, tr, br, bl) = bbox
+        tl = (int(tl[0]), int(tl[1]))
+        br = (int(br[0]), int(br[1]))
+        
+        # Draw rectangle with content-specific color
+        cv2.rectangle(viz_image, tl, br, box_color, 2)
+        
+        # Add text label
+        cv2.putText(viz_image, f"{prob:.2f}", (tl[0], tl[1]-10), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 1)
+        
+        # Add the text to our list for the side panel
+        if prob > 0.3:
+            full_transcription += text + " "
+
+    # Write the full transcription on the side panel
+    text_lines = full_transcription.split()
+    current_line = ""
+    for word in text_lines:
+        if len(current_line + " " + word) <= 60:
+            if current_line:
+                current_line += " " + word
+            else:
+                current_line = word
+        else:
+            if y_offset < h - 30:
+                draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
+                y_offset += 25
+            current_line = word
+    
+    if current_line and y_offset < h - 30:
+        draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
+            
+    # Convert the PIL image back to an OpenCV image
+    final_text_panel = np.array(pil_text_panel)
+
+    # Combine the visualized image and the text panel side-by-side
+    combined_image = np.hstack((viz_image, final_text_panel))
+    
+    return combined_image, full_transcription.strip()
 
 def group_text_into_paragraphs(results, line_threshold=30, word_threshold=50):
     """
@@ -121,152 +296,68 @@ def create_paragraph_text(paragraphs):
     
     return full_text.strip()
 
-def detect_text_orientation(image):
-    """
-    Detect orientation based on text alignment and OCR confidence
-    """
-    rotations = [0, 90, 180, 270]
-    best_rotation = 0
-    best_confidence = 0
+def _extract_document_content(image, ocr_results, document_type):
+    """Extract structured information from specific document types"""
+    # Combine all OCR text
+    full_text = ' '.join([text for _, text, _ in ocr_results])
     
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    for rotation in rotations:
-        # Rotate image
-        if rotation == 90:
-            rotated = cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE)
-        elif rotation == 180:
-            rotated = cv2.rotate(gray, cv2.ROTATE_180)
-        elif rotation == 270:
-            rotated = cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        else:
-            rotated = gray
-        
-        # Try OCR on rotated image
-        try:
-            results = reader.readtext(rotated)
-            if results:
-                total_confidence = sum(prob for _, _, prob in results)
-                avg_confidence = total_confidence / len(results)
-                
-                if avg_confidence > best_confidence:
-                    best_confidence = avg_confidence
-                    best_rotation = rotation
-        except:
-            continue
-    
-    return best_rotation
-
-def rotate_image(image, angle):
-    """
-    Rotate image by specified angle
-    """
-    if angle == 0:
-        return image
-    
-    if angle == 90:
-        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
-    elif angle == 180:
-        return cv2.rotate(image, cv2.ROTATE_180)
-    elif angle == 270:
-        return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    if document_type == "id_card":
+        return _extract_id_card_info(full_text)
+    elif document_type == "passport":
+        return _extract_passport_info(full_text)
     else:
-        (h, w) = image.shape[:2]
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated = cv2.warpAffine(image, M, (w, h))
-        return rotated
+        return full_text
 
-def preprocess_image_for_ocr(image):
-    """
-    Preprocess image to improve OCR accuracy
-    """
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    denoised = cv2.medianBlur(gray, 3)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(denoised)
-    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-    sharpened = cv2.filter2D(enhanced, -1, kernel)
-    return sharpened
-
-def draw_ocr_results(image, results, text_panel_width=800):
-    """
-    Draws OCR bounding boxes on the image and creates a side panel with transcribed text.
-    """
-    # Make a copy to draw on
-    viz_image = image.copy()
+def _extract_id_card_info(text):
+    """Extract key information from ID cards"""
+    info = []
     
-    # Create a white panel for the transcribed text
-    h, w, _ = viz_image.shape
-    text_panel = np.ones((h, text_panel_width, 3), dtype=np.uint8) * 255
+    # Look for ID number
+    id_match = re.search(r'[A-Z0-9]{6,20}', text)
+    if id_match:
+        info.append(f"ID Number: {id_match.group()}")
     
-    # Convert to PIL Image for drawing text with better font support
-    pil_text_panel = Image.fromarray(text_panel)
-    draw = ImageDraw.Draw(pil_text_panel)
+    # Look for dates
+    date_matches = re.findall(r'\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}', text)
+    if date_matches:
+        info.append(f"Dates found: {', '.join(date_matches)}")
     
-    try:
-        font = ImageFont.truetype("arial.ttf", 16)
-        title_font = ImageFont.truetype("arial.ttf", 18)
-    except IOError:
-        font = ImageFont.load_default()
-        title_font = ImageFont.load_default()
-
-    y_offset = 20
-    full_transcription = ""
-
-    # Draw title
-    draw.text((20, y_offset), "EXTRACTED TEXT (Grouped by Paragraphs):", font=title_font, fill=(0, 0, 0))
-    y_offset += 40
-
-    # Draw bounding boxes and collect text
-    for (bbox, text, prob) in results:
-        # Get top-left and bottom-right points from the bounding box
-        (tl, tr, br, bl) = bbox
-        tl = (int(tl[0]), int(tl[1]))
-        br = (int(br[0]), int(br[1]))
-        
-        # Draw a green rectangle around the detected text
-        cv2.rectangle(viz_image, tl, br, (0, 255, 0), 2)
-        
-        # Add text label
-        cv2.putText(viz_image, f"{prob:.2f}", (tl[0], tl[1]-10), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        
-        # Add the text to our list for the side panel
-        if prob > 0.3:
-            full_transcription += text + " "
-
-    # Write the full transcription on the side panel
-    text_lines = full_transcription.split()
-    current_line = ""
-    for word in text_lines:
-        if len(current_line + " " + word) <= 60:  # Rough character count for line wrapping
-            if current_line:
-                current_line += " " + word
-            else:
-                current_line = word
-        else:
-            if y_offset < h - 30:
-                draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
-                y_offset += 25
-            current_line = word
+    # Look for names (simple pattern)
+    name_match = re.search(r'[A-Z][a-z]+ [A-Z][a-z]+', text)
+    if name_match:
+        info.append(f"Possible Name: {name_match.group()}")
     
-    if current_line and y_offset < h - 30:
-        draw.text((20, y_offset), current_line, font=font, fill=(0, 0, 0))
-            
-    # Convert the PIL image back to an OpenCV image
-    final_text_panel = np.array(pil_text_panel)
+    return '\n'.join(info) if info else "No structured information extracted"
 
-    # Combine the visualized image and the text panel side-by-side
-    combined_image = np.hstack((viz_image, final_text_panel))
+def _extract_passport_info(text):
+    """Extract key information from passports"""
+    info = []
     
-    return combined_image, full_transcription.strip()
+    # Look for passport number
+    passport_match = re.search(r'[A-Z0-9]{6,12}', text)
+    if passport_match:
+        info.append(f"Passport Number: {passport_match.group()}")
+    
+    # Look for nationality
+    nationality_keywords = ['nationality', 'nacionalidad', 'جنسية']
+    for keyword in nationality_keywords:
+        if keyword in text.lower():
+            info.append(f"Nationality field found")
+            break
+    
+    return '\n'.join(info) if info else "No structured information extracted"
 
 def process_pdf_to_single_text_file(pdf_path, output_base_folder):
     """
-    Process a single PDF and save ALL text to one final text file per PDF
+    Enhanced version with multilingual document detection
     """
     global stop_processing
+    
+    # Initialize detectors
+    id_processor = idProcessor(reader)  # Pass reader to constructor
+    table_processor = TableProcessor()
+    image_processor = ImageProcessor()
+    content_detector = ContentDetector(id_processor, table_processor, image_processor)
     
     # Create folder with PDF name
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -279,8 +370,9 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
     total_pages_processed = 0
     total_processing_time = 0
     page_times = []
+    content_stats = {"text": 0, "table": 0, "image": 0, "id_card": 0, "passport": 0}
     
-    # This will contain ALL text from ALL pages
+    # This will contain ALL text from ALL pages with content annotations
     all_extracted_text = f"EXTRACTED TEXT FROM: {pdf_name}\n"
     all_extracted_text += f"PROCESSING STARTED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
     all_extracted_text += "=" * 80 + "\n\n"
@@ -292,7 +384,6 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
             print(f"📄 Processing {total_pages} pages from: {pdf_name}")
             
             for page_num in range(total_pages):
-                # Check if user pressed Ctrl+C
                 if stop_processing:
                     print(f"🛑 Stopping processing as requested by user...")
                     break
@@ -318,6 +409,13 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
                 # Preprocess for OCR
                 preprocessed_image = preprocess_image_for_ocr(corrected_image)
                 
+                # Detect content type with multilingual support
+                content_type = content_detector.detect_content_type(corrected_image)
+                # Initialize content type in stats if not present
+                if content_type not in content_stats:
+                    content_stats[content_type] = 0
+                content_stats[content_type] += 1
+                
                 # Perform OCR
                 results = reader.readtext(preprocessed_image)
                 
@@ -326,9 +424,9 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
                 page_times.append(page_total_time)
                 total_processing_time += page_total_time
                 
-                # Add page header to the text
+                # Add page header to the text with content type
                 all_extracted_text += f"\n{'='*60}\n"
-                all_extracted_text += f"PAGE {page_num + 1}\n"
+                all_extracted_text += f"PAGE {page_num + 1} - CONTENT TYPE: {content_type.upper()}\n"
                 all_extracted_text += f"Processing time: {page_total_time:.2f}s\n"
                 all_extracted_text += f"{'='*60}\n\n"
                 
@@ -337,37 +435,81 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
                     all_extracted_text += "NO TEXT DETECTED\n\n"
                     continue
                 
-                print(f"    ✅ Detected {len(results)} text elements")
+                print(f"    ✅ Detected {len(results)} text elements - Type: {content_type}")
                 
-                # Group text into paragraphs
-                paragraphs = group_text_into_paragraphs(results)
-                page_text = create_paragraph_text(paragraphs)
+                # Process based on content type
+                if content_type == "table":
+                    # Extract table structure
+                    table_text = table_processor.extract_table_structure(corrected_image, results)
+                    all_extracted_text += "[TABLE START]\n"
+                    all_extracted_text += table_text + "\n"
+                    all_extracted_text += "[TABLE END]\n\n"
+                    print(f"    📊 Extracted table with structure")
+                    
+                elif content_type in ["id_card", "passport"]:
+                    # Special handling for documents
+                    document_text = _extract_document_content(corrected_image, results, content_type)
+                    all_extracted_text += f"[{content_type.upper()} START]\n"
+                    all_extracted_text += f"Document Type: {content_type}\n"
+                    all_extracted_text += f"Extracted Information:\n{document_text}\n"
+                    all_extracted_text += f"[{content_type.upper()} END]\n\n"
+                    print(f"    📄 Extracted {content_type} information")
+                    
+                elif content_type == "image":
+                    # Get image classification
+                    image_type = content_detector.classify_image_content(corrected_image)
+                    
+                    # Group text for image caption/description
+                    paragraphs = group_text_into_paragraphs(results)
+                    image_text = create_paragraph_text(paragraphs)
+                    
+                    all_extracted_text += f"[IMAGE START - {image_type}]\n"
+                    if image_text:
+                        all_extracted_text += f"Text in image: {image_text}\n"
+                    all_extracted_text += f"[IMAGE END]\n\n"
+                    print(f"    🖼️  Extracted image content: {image_type}")
+                    
+                else:  # Regular text
+                    # Group text into paragraphs
+                    paragraphs = group_text_into_paragraphs(results)
+                    page_text = create_paragraph_text(paragraphs)
+                    
+                    if page_text:
+                        all_extracted_text += page_text + "\n\n"
+                        print(f"    ✅ Extracted {len(page_text)} characters")
+                    else:
+                        all_extracted_text += "No readable text extracted.\n\n"
+                        print(f"    ⚠️  No readable text extracted")
                 
-                # Create visualization (optional - for debugging)
-                visualization_image, extracted_text = draw_ocr_results(corrected_image, results)
+                # Create visualization with content type info
+                content_info = f"Detected as: {content_type}"
+                if content_type in ["id_card", "passport"]:
+                    content_info += " (Official Document)"
                 
-                # Save visualization image (optional)
-                viz_filename = os.path.join(output_folder, f"page_{page_num + 1:03d}_analysis.png")
+                visualization_image, extracted_text = draw_ocr_results_with_content_type(
+                    corrected_image, results, content_type, content_info
+                )
+                
+                # Save visualization image
+                viz_filename = os.path.join(output_folder, f"page_{page_num + 1:03d}_{content_type}_analysis.png")
                 cv2.imwrite(viz_filename, visualization_image)
-                
-                # Add the extracted text to our main document
-                if page_text:
-                    all_extracted_text += page_text + "\n\n"
-                    print(f"    ✅ Extracted {len(page_text)} characters")
-                else:
-                    all_extracted_text += "No readable text extracted.\n\n"
-                    print(f"    ⚠️  No readable text extracted")
                 
                 print(f"    ⏱️  Page processed in: {page_total_time:.2f}s")
                 total_pages_processed += 1
         
-        # Add final summary to the text
+        # Add enhanced final summary with document statistics
         all_extracted_text += "\n" + "=" * 80 + "\n"
         all_extracted_text += "PROCESSING SUMMARY\n"
         all_extracted_text += "=" * 80 + "\n"
         all_extracted_text += f"PDF File: {pdf_name}\n"
         all_extracted_text += f"Total Pages: {total_pages}\n"
         all_extracted_text += f"Pages Processed: {total_pages_processed}\n"
+        all_extracted_text += f"Content Distribution:\n"
+        
+        # Dynamically list all content types found
+        for content_type, count in content_stats.items():
+            all_extracted_text += f"  - {content_type.title()} Pages: {count}\n"
+            
         all_extracted_text += f"Total Processing Time: {total_processing_time:.2f}s\n"
         
         if page_times:
@@ -391,6 +533,9 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
         
         print(f"\n✅ Successfully processed {pdf_name}")
         print(f"📊 Processed {total_pages_processed}/{total_pages} pages")
+        print(f"📈 Content Distribution:")
+        for content_type, count in content_stats.items():
+            print(f"   {content_type.title()}: {count}")
         print(f"⏱️  Total time: {total_processing_time:.2f}s")
         print(f"📄 Final text file: {final_text_filename}")
         
@@ -401,6 +546,8 @@ def process_pdf_to_single_text_file(pdf_path, output_base_folder):
         
     except Exception as e:
         print(f"❌ Error processing {pdf_path}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def process_all_pdfs_in_folder(input_folder, output_base_folder):
@@ -483,8 +630,8 @@ def process_all_pdfs_in_folder(input_folder, output_base_folder):
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 
-input_folder = 'my/path/to/input/folder'  # Change this to your input folder
-output_base_folder = 'my/path/to/output/folder'  # Change this to your desired output folder
+input_folder = '/Users/emmafarigoule/Desktop/ID testing'
+output_base_folder = '/Users/emmafarigoule/Desktop/CICR/extracted'
 
 print(f"🔍 Looking for PDFs in: {input_folder}")
 print(f"💾 Output will be saved to: {output_base_folder}")
