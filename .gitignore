@@ -1,4 +1,10 @@
-Icon
+# Python
+__pycache__/
+*.pyc
+.python-version
+.venv/
+venv/
+
+# Your specific ignores
 PdfAnalysis/
 Icon
-PdfAnalysis/
