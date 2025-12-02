@@ -6,7 +6,7 @@ import os
 # Add classifier to path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'classifier'))
 
-from classifier.YOLOIDDetector import YOLOIDDetector
+from ModelTraining.YOLOIDDetector import YOLOIDDetector
 from config import YOLO_MODEL_PATHS
 
 class ContentDetector:

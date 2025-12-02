@@ -63,7 +63,7 @@ import os
 import sys
 import importlib.util
 
-yoloid_file_path = '/Users/emmafarigoule/Desktop/CICR/OCR&YOLO/NewAttempt/classifier/YOLOIDDetector.py'
+yoloid_file_path = '/Users/emmafarigoule/Desktop/CICR/OCR&YOLO/NewAttempt/ModelTraining/YOLOIDDetector.py'
 
 print(f"🔍 Loading YOLOIDDetector from: {yoloid_file_path}")
 
