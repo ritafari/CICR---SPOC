@@ -9,14 +9,12 @@ INPUT_FOLDER = '/Users/emmafarigoule/Desktop/CICR/documents&data/data&brainstorm
 OUTPUT_FOLDER = '/Users/emmafarigoule/Desktop/CICR/documents&data/extracted'
 
 # Model paths
-YOLO_MODEL_PATHS = [
-    '/Users/emmafarigoule/Desktop/CICR/id_card_detection/yolo_id_detector_v23/weights/best.pt'
-]
+YOLO_MODEL_PATHS = '/Users/emmafarigoule/Desktop/CICR/CICR--SPOC/best.pt'
 
 # Training dataset paths (used by classifier/training_model.py)
-TRAINING_IMAGES_DIR = '/Users/emmafarigoule/Desktop/CICR/OCR&YOLO/id_card_detector/my_images'
-TRAINING_LABELS_DIR = '/Users/emmafarigoule/Desktop/CICR/OCR&YOLO/id_card_detector/my_labels'
-TRAINING_OUTPUT_DIR = '/Users/emmafarigoule/Desktop/CICR/OCR&YOLO/id_card_detector/dataset'
+TRAINING_IMAGES_DIR = '/Users/emmafarigoule/Desktop/CICR/id_card_detector/my_images'
+TRAINING_LABELS_DIR = '/Users/emmafarigoule/Desktop/CICR/id_card_detector/my_labels'
+TRAINING_OUTPUT_DIR = '/Users/emmafarigoule/Desktop/CICR/id_card_detector/dataset'
 
 # ===== PROCESSING SETTINGS =====
 DPI = 300  # PDF rendering resolution
