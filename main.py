@@ -22,6 +22,7 @@ from processors.contentDetector import ContentDetector
 from processors.ocr_processor import OCRProcessor
 from processors.text_processor import TextPostprocessor
 from processors.visualizer import Visualizer
+from json_to_text import JSONTextExtractor
 
 # Global stop flag
 stop_processing = False
@@ -178,6 +179,8 @@ def process_pdf_folder(input_folder, output_base_folder):
     
     print(f"\n📊 Processed {successful}/{len(pdf_files)} PDFs successfully")
 
+
+
 if __name__ == "__main__":
     # Register signal handler
     signal.signal(signal.SIGINT, signal_handler)
@@ -198,3 +201,10 @@ if __name__ == "__main__":
     process_pdf_folder(INPUT_FOLDER, OUTPUT_FOLDER)
     
     print(f"\n✅ Processing complete!")
+
+    llm_input_string = JSONTextExtractor.extract_all_from_folder(OUTPUT_FOLDER)
+    print(f"\n✅ Texto extraído para LLM: {len(llm_input_string)} caracteres")
+    print("\n📋 Preview (primeros 500 caracteres):")
+    print("-" * 50)
+    print(llm_input_string[:500] + "..." if len(llm_input_string) > 500 else llm_input_string)
+    print("-" * 50)

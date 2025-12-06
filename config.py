@@ -9,7 +9,7 @@ INPUT_FOLDER = '/Users/emmafarigoule/Desktop/CICR/documents&data/data&brainstorm
 OUTPUT_FOLDER = '/Users/emmafarigoule/Desktop/CICR/documents&data/extracted'
 
 # Model paths
-YOLO_MODEL_PATHS = '/Users/emmafarigoule/Desktop/CICR/CICR--SPOC/best.pt'
+YOLO_MODEL_PATHS = ['/Users/emmafarigoule/Desktop/CICR/CICR---SPOC/best.pt']
 
 # Training dataset paths (used by classifier/training_model.py)
 TRAINING_IMAGES_DIR = '/Users/emmafarigoule/Desktop/CICR/id_card_detector/my_images'
